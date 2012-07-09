@@ -126,11 +126,16 @@ abstract class CI_DB_forge {
 	 * Add Key
 	 *
 	 * @param	string	key
-	 * @param	string	type
+	 * @param	bool	primary key
 	 * @return	object
 	 */
 	public function add_key($key = '', $primary = FALSE)
 	{
+		if (empty($key))
+		{
+			show_error('Key information is required for that operation.');
+		}
+
 		if (is_array($key))
 		{
 			foreach ($key as $one)
@@ -138,12 +143,7 @@ abstract class CI_DB_forge {
 				$this->add_key($one, $primary);
 			}
 
-			return;
-		}
-
-		if ($key === '')
-		{
-			show_error('Key information is required for that operation.');
+			return $this;
 		}
 
 		if ($primary === TRUE)
@@ -163,12 +163,12 @@ abstract class CI_DB_forge {
 	/**
 	 * Add Field
 	 *
-	 * @param	string	collation
+	 * @param	array
 	 * @return	object
 	 */
 	public function add_field($field = '')
 	{
-		if ($field === '')
+		if (empty($field))
 		{
 			show_error('Field information is required.');
 		}
