@@ -21,18 +21,18 @@
  * @copyright	Copyright (c) 2008 - 2012, EllisLab, Inc. (http://ellislab.com/)
  * @license		http://opensource.org/licenses/OSL-3.0 Open Software License (OSL 3.0)
  * @link		http://codeigniter.com
- * @since		Version 3.0
+ * @since		Version 2.1.0
  * @filesource
  */
 
 /**
- * Interbase/Firebird Forge Class
+ * PDO Firebird Forge Class
  *
  * @category	Database
  * @author		EllisLab Dev Team
  * @link		http://codeigniter.com/user_guide/database/
  */
-class CI_DB_ibase_forge extends CI_DB_forge {
+class CI_DB_pdo_firebird_forge extends CI_DB_pdo_forge {
 
 	/**
 	 * Create database
@@ -214,5 +214,5 @@ class CI_DB_ibase_forge extends CI_DB_forge {
 
 }
 
-/* End of file ibase_forge.php */
-/* Location: ./system/database/drivers/ibase/ibase_forge.php */
+/* End of file pdo_firebird_forge.php */
+/* Location: ./system/database/drivers/pdo/subdrivers/pdo_firebird_forge.php */

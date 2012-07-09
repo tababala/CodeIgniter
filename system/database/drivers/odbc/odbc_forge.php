@@ -34,8 +34,6 @@
  */
 class CI_DB_odbc_forge extends CI_DB_forge {
 
-	protected $_drop_table		= 'DROP TABLE %s';
-
 	/**
 	 * Create Table
 	 *
@@ -119,6 +117,24 @@ class CI_DB_odbc_forge extends CI_DB_forge {
 		}
 
 		return $sql."\n)";
+	}
+
+	// --------------------------------------------------------------------
+
+	/**
+	 * Drop Table
+	 *
+	 * Generates a platform-specific DROP TABLE string
+	 *
+	 * @param	string	the table name
+	 * @param	bool
+	 * @return	string
+	 */
+	protected function _drop_table($table, $if_exists)
+	{
+		return ($if_exists === FALSE)
+			? 'DROP TABLE '.$this->db->escape_identifiers($table)
+			: FALSE;
 	}
 
 	// --------------------------------------------------------------------

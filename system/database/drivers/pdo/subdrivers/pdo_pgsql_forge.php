@@ -21,18 +21,18 @@
  * @copyright	Copyright (c) 2008 - 2012, EllisLab, Inc. (http://ellislab.com/)
  * @license		http://opensource.org/licenses/OSL-3.0 Open Software License (OSL 3.0)
  * @link		http://codeigniter.com
- * @since		Version 1.0
+ * @since		Version 2.1.0
  * @filesource
  */
 
 /**
- * Postgre Forge Class
+ * PDO PostgreSQL Forge Class
  *
  * @category	Database
  * @author		EllisLab Dev Team
  * @link		http://codeigniter.com/user_guide/database/
  */
-class CI_DB_postgre_forge extends CI_DB_forge {
+class CI_DB_pdo_pgsql_forge extends CI_DB_pdo_forge {
 
 	/**
 	 * Process Fields
@@ -213,5 +213,5 @@ class CI_DB_postgre_forge extends CI_DB_forge {
 
 }
 
-/* End of file postgre_forge.php */
-/* Location: ./system/database/drivers/postgre/postgre_forge.php */
+/* End of file pdo_pgsql_forge.php */
+/* Location: ./system/database/drivers/pdo/subdrivers/pdo_pgsql_forge.php */

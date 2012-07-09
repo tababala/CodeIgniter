@@ -21,63 +21,21 @@
  * @copyright	Copyright (c) 2008 - 2012, EllisLab, Inc. (http://ellislab.com/)
  * @license		http://opensource.org/licenses/OSL-3.0 Open Software License (OSL 3.0)
  * @link		http://codeigniter.com
- * @since		Version 3.0
+ * @since		Version 2.1.0
  * @filesource
  */
 
 /**
- * Interbase/Firebird Forge Class
+ * PDO Oracle Forge Class
  *
  * @category	Database
  * @author		EllisLab Dev Team
  * @link		http://codeigniter.com/user_guide/database/
  */
-class CI_DB_ibase_forge extends CI_DB_forge {
+class CI_DB_pdo_oci_forge extends CI_DB_pdo_forge {
 
-	/**
-	 * Create database
-	 *
-	 * @param	string	the database name
-	 * @return	string
-	 */
-	public function create_database($db_name)
-	{
-		// Firebird databases are flat files, so a path is required
-
-		// Hostname is needed for remote access
-		empty($this->db->hostname) OR $db_name = $this->hostname.':'.$db_name;
-
-		return parent::create_database('"'.$db_name.'"');
-	}
-
-	// --------------------------------------------------------------------
-
-	/**
-	 * Drop database
-	 *
-	 * @param	string	the database name
-	 *		- not used in this driver, the current db is dropped
-	 * @return	bool
-	 */
-	public function drop_database($db_name = '')
-	{
-		if ( ! ibase_drop_db($this->conn_id))
-		{
-			return ($this->db->db_debug) ? $this->db->display_error('db_unable_to_drop') : FALSE;
-		}
-		elseif ( ! empty($this->db->data_cache['db_names']))
-		{
-			$key = array_search(strtolower($this->db->database), array_map('strtolower', $this->db->data_cache['db_names']), TRUE);
-			if ($key !== FALSE)
-			{
-				unset($this->db->data_cache['db_names'][$key]);
-			}
-		}
-
-		return TRUE;
-	}
-
-	// --------------------------------------------------------------------
+	protected $_create_database	= FALSE;
+	protected $_drop_database	= FALSE;
 
 	/**
 	 * Create Table
@@ -93,7 +51,12 @@ class CI_DB_ibase_forge extends CI_DB_forge {
 	{
 		$sql = 'CREATE TABLE ';
 
-		$sql .= $this->db->escape_identifiers($table).'(';
+		if ($if_not_exists === TRUE)
+		{
+			$sql .= 'IF NOT EXISTS ';
+		}
+
+		$sql .= $this->db->escape_identifiers($table).' (';
 		$current_field_count = 0;
 
 		foreach ($fields as $field => $attributes)
@@ -111,9 +74,7 @@ class CI_DB_ibase_forge extends CI_DB_forge {
 
 				$sql .= "\n\t".$this->db->escape_identifiers($field).' '.$attributes['TYPE'];
 
-				empty($attributes['CONSTRAINT']) OR $sql .= '('.$attributes['CONSTRAINT'].')';
-
-				if ( ! empty($attributes['UNSIGNED']) && $attributes['UNSIGNED'] === TRUE)
+				if (isset($attributes['UNSINGED']) && $attributes['UNSIGNED'] === TRUE)
 				{
 					$sql .= ' UNSIGNED';
 				}
@@ -123,13 +84,10 @@ class CI_DB_ibase_forge extends CI_DB_forge {
 					$sql .= " DEFAULT '".$attributes['DEFAULT']."'";
 				}
 
-				$sql .= ( ! empty($attributes['NULL']) && $attributes['NULL'] === TRUE)
-					? ' NULL' : ' NOT NULL';
+				$sql .= (isset($attributes['NULL']) && $attributes['NULL'] === TRUE)
+					? '' : ' NOT NULL';
 
-				if ( ! empty($attributes['AUTO_INCREMENT']) && $attributes['AUTO_INCREMENT'] === TRUE)
-				{
-					$sql .= ' AUTO_INCREMENT';
-				}
+				empty($attributes['CONSTRAINT']) OR ' CONSTRAINT '.$attributes['CONSTRAINT'];
 			}
 
 			// don't add a comma on the end of the last field
@@ -141,8 +99,7 @@ class CI_DB_ibase_forge extends CI_DB_forge {
 
 		if (count($primary_keys) > 0)
 		{
-			$primary_keys = $this->db->escape_identifiers($primary_keys);
-			$sql .= ",\n\tPRIMARY KEY (".implode(', ', $primary_keys).')';
+			$sql .= ",\n\tCONSTRAINT ".$table.' PRIMARY KEY ('.implode(', ', $this->db->escape_identifiers($primary_keys)).')';
 		}
 
 		if (is_array($keys) && count($keys) > 0)
@@ -153,7 +110,7 @@ class CI_DB_ibase_forge extends CI_DB_forge {
 					? $this->db->escape_identifiers($key)
 					: array($this->db->escape_identifiers($key));
 
-				$sql .= ",\n\tUNIQUE (".implode(', ', $key).')';
+				$sql .= ",\n\tUNIQUE COLUMNS (".implode(', ', $key).')';
 			}
 		}
 
@@ -180,7 +137,7 @@ class CI_DB_ibase_forge extends CI_DB_forge {
 			return $sql;
 		}
 
-		$query = $this->db->query('SELECT "RDB$RELATION_NAME" FROM "RDB$RELATIONS" WHERE "RDB$RELATION_NAME" = '.$this->db->escape($table));
+		$query = $this->db->query('SELECT "TABLE_NAME" FROM "ALL_TABLES" WHERE "TABLE_NAME" = '.$this->db->escape($table));
 		$query = $query->row_array();
 
 		return empty($query) ? TRUE : $sql;
@@ -205,14 +162,22 @@ class CI_DB_ibase_forge extends CI_DB_forge {
 	 */
 	protected function _alter_table($alter_type, $table, $column_name, $column_definition = '', $default_value = '', $null = '', $after_field = '')
 	{
-		return 'ALTER TABLE '.$this->db->escape_identifiers($table).' '.$alter_type.' '.$this->db->escape_identifiers($column_name)
-			.' '.$column_definition
+		$sql = 'ALTER TABLE '.$this->db->escape_identifiers($table).' '.$alter_type.' '.$this->db->escape_identifiers($column_name);
+
+		// DROP has everything it needs now.
+		if ($alter_type === 'DROP')
+		{
+			return $sql;
+		}
+
+		return $sql.' '.$column_definition
 			.($default_value !== '' ? ' DEFAULT "'.$default_value.'"' : '')
 			.($null === NULL ? ' NULL' : ' NOT NULL')
 			.($after_field !== '' ? ' AFTER '.$this->db->escape_identifiers($after_field) : '');
+
 	}
 
 }
 
-/* End of file ibase_forge.php */
-/* Location: ./system/database/drivers/ibase/ibase_forge.php */
+/* End of file pdo_oci_forge.php */
+/* Location: ./system/database/drivers/pdo/subdrivers/pdo_oci_forge.php */

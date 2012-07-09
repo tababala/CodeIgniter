@@ -21,18 +21,21 @@
  * @copyright	Copyright (c) 2008 - 2012, EllisLab, Inc. (http://ellislab.com/)
  * @license		http://opensource.org/licenses/OSL-3.0 Open Software License (OSL 3.0)
  * @link		http://codeigniter.com
- * @since		Version 1.0
+ * @since		Version 2.1.0
  * @filesource
  */
 
 /**
- * Postgre Forge Class
+ * PDO CUBRID Forge Class
  *
  * @category	Database
  * @author		EllisLab Dev Team
  * @link		http://codeigniter.com/user_guide/database/
  */
-class CI_DB_postgre_forge extends CI_DB_forge {
+class CI_DB_pdo_cubrid_forge extends CI_DB_pdo_forge {
+
+	protected $_create_database	= FALSE;
+	protected $_drop_database	= FALSE;
 
 	/**
 	 * Process Fields
@@ -40,10 +43,10 @@ class CI_DB_postgre_forge extends CI_DB_forge {
 	 * @param	mixed	the fields
 	 * @return	string
 	 */
-	protected function _process_fields($fields, $primary_keys = array())
+	protected function _process_fields($fields)
 	{
-		$sql = '';
 		$current_field_count = 0;
+		$sql = '';
 
 		foreach ($fields as $field => $attributes)
 		{
@@ -56,54 +59,46 @@ class CI_DB_postgre_forge extends CI_DB_forge {
 			}
 			else
 			{
+				$attributes = array_change_key_case($attributes, CASE_UPPER);
+
 				$sql .= "\n\t".$this->db->escape_identifiers($field);
 
-				$attributes = array_change_key_case($attributes, CASE_UPPER);
-				$is_unsigned = ( ! empty($attributes['UNSIGNED']) && $attributes['UNSIGNED'] === TRUE);
+				empty($attributes['NAME']) OR $sql .= ' '.$this->db->escape_identifiers($attributes['NAME']).' ';
 
-				// Convert datatypes to be PostgreSQL-compatible
-				switch (strtoupper($attributes['TYPE']))
+				if ( ! empty($attributes['TYPE']))
 				{
-					case 'TINYINT':
-						$attributes['TYPE'] = 'SMALLINT';
-						break;
-					case 'SMALLINT':
-						$attributes['TYPE'] = ($is_unsigned) ? 'INTEGER' : 'SMALLINT';
-						break;
-					case 'MEDIUMINT':
-						$attributes['TYPE'] = 'INTEGER';
-						break;
-					case 'INT':
-						$attributes['TYPE'] = ($is_unsigned) ? 'BIGINT' : 'INTEGER';
-						break;
-					case 'BIGINT':
-						$attributes['TYPE'] = ($is_unsigned) ? 'NUMERIC' : 'BIGINT';
-						break;
-					case 'DOUBLE':
-						$attributes['TYPE'] = 'DOUBLE PRECISION';
-						break;
-					case 'DATETIME':
-						$attributes['TYPE'] = 'TIMESTAMP';
-						break;
-					case 'LONGTEXT':
-						$attributes['TYPE'] = 'TEXT';
-						break;
-					case 'BLOB':
-						$attributes['TYPE'] = 'BYTEA';
-						break;
-					default:
-						break;
+					$sql .= ' '.$attributes['TYPE'];
+
+					if ( ! empty($attributes['CONSTRAINT']))
+					{
+						switch (strtolower($attributes['TYPE']))
+						{
+							case 'decimal':
+							case 'float':
+							case 'numeric':
+								$sql .= '('.implode(',', $attributes['CONSTRAINT']).')';
+								break;
+							case 'enum':
+								// Will be supported in the future as part a part of
+								// MySQL compatibility features.
+								break;
+							case 'set':
+								$sql .= '("'.implode('","', $attributes['CONSTRAINT']).'")';
+								break;
+							default:
+								$sql .= '('.$attributes['CONSTRAINT'].')';
+						}
+					}
 				}
 
-				// If this is an auto-incrementing primary key, use the serial data type instead
-				$sql .= (in_array($field, $primary_keys) && ! empty($attributes['AUTO_INCREMENT']) && $attributes['AUTO_INCREMENT'] === TRUE)
-					? ' SERIAL' : ' '.$attributes['TYPE'];
-
-				// Modified to prevent constraints with integer data types
-				if ( ! empty($attributes['CONSTRAINT']) && strpos($attributes['TYPE'], 'INT') === FALSE)
+			/* As of version 8.4.1 CUBRID does not support UNSIGNED INTEGER data type.
+			 * Will be supported in the next release as a part of MySQL Compatibility.
+			 *
+				if (isset($attributes['UNSIGNED']) && $attributes['UNSIGNED'] === TRUE)
 				{
-					$sql .= '('.$attributes['CONSTRAINT'].')';
+					$sql .= ' UNSIGNED';
 				}
+			 */
 
 				if (isset($attributes['DEFAULT']))
 				{
@@ -113,7 +108,11 @@ class CI_DB_postgre_forge extends CI_DB_forge {
 				$sql .= ( ! empty($attributes['NULL']) && $attributes['NULL'] === TRUE)
 					? ' NULL' : ' NOT NULL';
 
-				// Added new attribute to create unique fields. Also works with MySQL
+				if ( ! empty($attributes['AUTO_INCREMENT']) && $attributes['AUTO_INCREMENT'] === TRUE)
+				{
+					$sql .= ' AUTO_INCREMENT';
+				}
+
 				if ( ! empty($attributes['UNIQUE']) && $attributes['UNIQUE'] === TRUE)
 				{
 					$sql .= ' UNIQUE';
@@ -136,7 +135,7 @@ class CI_DB_postgre_forge extends CI_DB_forge {
 	 * Create Table
 	 *
 	 * @param	string	the table name
-	 * @param	array	the fields
+	 * @param	mixed	the fields
 	 * @param	mixed	primary key(s)
 	 * @param	mixed	key(s)
 	 * @param	bool	should 'IF NOT EXISTS' be added to the SQL
@@ -146,38 +145,42 @@ class CI_DB_postgre_forge extends CI_DB_forge {
 	{
 		$sql = 'CREATE TABLE ';
 
-		// PostgreSQL doesn't support IF NOT EXISTS syntax so we check if table exists manually
-		if ($if_not_exists === TRUE && $this->db->table_exists($table))
+		/* As of version 8.4.1 CUBRID does not support this SQL syntax.
+		if ($if_not_exists === TRUE)
 		{
-			return TRUE;
+			$sql .= 'IF NOT EXISTS ';
 		}
+		*/
 
-		$sql .= $this->db->escape_identifiers($table).' ('.$this->_process_fields($fields, $primary_keys);
+		$sql .= $this->db->escape_identifiers($table).' ('.$this->_process_fields($fields);
 
+		// If there is a PK defined
 		if (count($primary_keys) > 0)
 		{
-			$sql .= ",\n\tPRIMARY KEY (".implode(', ', $this->db->escape_identifiers($primary_keys)).')';
+			$key_name = $this->db->escape_identifiers('pk_'.$table.'_'.implode('_', $primary_keys));
+			$sql .= ",\n\tCONSTRAINT ".$key_name.' PRIMARY KEY('.implode(', ', $this->db->escape_identifiers($primary_keys)).')';
 		}
-
-		$sql .= "\n);";
 
 		if (is_array($keys) && count($keys) > 0)
 		{
 			foreach ($keys as $key)
 			{
-				$key = is_array($key)
-					? $this->db->escape_identifiers($key)
-					: array($this->db->escape_identifiers($key));
-
-				foreach ($key as $field)
+				if (is_array($key))
 				{
-					$sql .= "\nCREATE INDEX ".$this->db->escape_identifiers($table.'_'.str_replace(array('"', "'"), '', $field).'_index')
-						.' ON '.$this->db->escape_identifiers($table).' ('.$this->db->escape_identifiers($field).');';
+					$key_name = $this->db->escape_identifiers('idx_'.$table.implode('_', $key));
+					$key = $this->db->escape_identifiers($key);
 				}
+				else
+				{
+					$key_name = $this->db->escape_identifiers('idx_'.$table.$key);
+					$key = array($key_name);
+				}
+
+				$sql .= ",\n\tKEY ".$key_name.' ('.implode(', ', $key).')';
 			}
 		}
 
-		return $sql;
+		return $sql."\n);";
 	}
 
 	// --------------------------------------------------------------------
@@ -190,28 +193,25 @@ class CI_DB_postgre_forge extends CI_DB_forge {
 	 *
 	 * @param	string	the ALTER type (ADD, DROP, CHANGE)
 	 * @param	string	the column name
-	 * @param	string	the table name
-	 * @param	string	the column definition
-	 * @param	string	the default value
-	 * @param	bool	should 'NOT NULL' be added
+	 * @param	array	fields
 	 * @param	string	the field after which we should add the new field
 	 * @return	string
 	 */
 	protected function _alter_table($alter_type, $table, $fields, $after_field = '')
- 	{
- 		$sql = 'ALTER TABLE '.$this->db->escape_identifiers($table).' '.$alter_type.' ';
+	{
+		$sql = 'ALTER TABLE '.$this->db->escape_identifiers($table).' '.$alter_type.' ';
 
- 		// DROP has everything it needs now.
- 		if ($alter_type === 'DROP')
- 		{
- 			return $sql.$this->db->escape_identifiers($fields);
- 		}
+		// DROP has everything it needs now.
+		if ($alter_type === 'DROP')
+		{
+			return $sql.$this->db->escape_identifiers($fields);
+		}
 
- 		return $sql.$this->_process_fields($fields)
+		return $sql.$this->_process_fields($fields)
 			.($after_field !== '' ? ' AFTER '.$this->db->escape_identifiers($after_field) : '');
- 	}
+	}
 
 }
 
-/* End of file postgre_forge.php */
-/* Location: ./system/database/drivers/postgre/postgre_forge.php */
+/* End of file pdo_cubrid_forge.php */
+/* Location: ./system/database/drivers/pdo/subdrivers/pdo_cubrid_forge.php */

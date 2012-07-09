@@ -37,12 +37,11 @@ abstract class CI_DB_forge {
 	public $fields		= array();
 	public $keys		= array();
 	public $primary_keys	= array();
-	public $db_char_set	=	'';
+	public $db_char_set	= '';
 
 	// Platform specific SQL strings
 	protected $_create_database	= 'CREATE DATABASE %s';
 	protected $_drop_database	= 'DROP DATABASE %s';
-	protected $_drop_table		= 'DROP TABLE IF EXISTS %s';
 	protected $_rename_table	= 'ALTER TABLE %s RENAME TO %s';
 
 	public function __construct()
@@ -243,23 +242,30 @@ abstract class CI_DB_forge {
 	 * Drop Table
 	 *
 	 * @param	string	the table name
+	 * @param	bool	wether to add an IF EXISTS clause or not
 	 * @return	bool
 	 */
-	public function drop_table($table_name)
+	public function drop_table($table_name, $if_exists = FALSE)
 	{
 		if ($table_name === '')
 		{
 			return ($this->db->db_debug) ? $this->db->display_error('db_table_name_required') : FALSE;
 		}
-		elseif ($this->_drop_table === FALSE)
+
+		$query = $this->_drop_table($this->db->dbprefix.$table_name, $if_exists);
+		if ($query === FALSE)
 		{
 			return ($this->db->db_debug) ? $this->db->display_error('db_unsuported_feature') : FALSE;
 		}
+		elseif ($query === TRUE)
+		{
+			return TRUE;
+		}
 
-		$result = $this->db->query(sprintf($this->_drop_table, $this->db->escape_identifiers($this->db->dbprefix.$table_name)));
+		$query = $this->db->query($query);
 
 		// Update table list cache
-		if ($result && ! empty($this->db->data_cache['table_names']))
+		if ($query && ! empty($this->db->data_cache['table_names']))
 		{
 			$key = array_search(strtolower($this->db->dbprefix.$table_name), array_map('strtolower', $this->db->data_cache['table_names']), TRUE);
 			if ($key !== FALSE)
@@ -268,7 +274,23 @@ abstract class CI_DB_forge {
 			}
 		}
 
-		return $result;
+		return $query;
+	}
+
+	// --------------------------------------------------------------------
+
+	/**
+	 * Drop Table
+	 *
+	 * Generates a platform-specific DROP TABLE string
+	 *
+	 * @param	string	the table name
+	 * @param	bool
+	 * @return	string
+	 */
+	protected function _drop_table($table, $if_exists)
+	{
+		return 'DROP TABLE '.($if_exists ? 'IF EXISTS ' : '').$this->db->escape_identifiers($table);
 	}
 
 	// --------------------------------------------------------------------

@@ -36,7 +36,6 @@ class CI_DB_oci8_forge extends CI_DB_forge {
 
 	protected $_create_database	= FALSE;
 	protected $_drop_database	= FALSE;
-	protected $_drop_table		= 'DROP TABLE %s';
 
 	/**
 	 * Create Table
@@ -116,6 +115,32 @@ class CI_DB_oci8_forge extends CI_DB_forge {
 		}
 
 		return $sql."\n)";
+	}
+
+	// --------------------------------------------------------------------
+
+	/**
+	 * Drop Table
+	 *
+	 * Generates a platform-specific DROP TABLE string
+	 *
+	 * @param	string	the table name
+	 * @param	bool
+	 * @return	string
+	 */
+	protected function _drop_table($table, $if_exists)
+	{
+		$sql = 'DROP TABLE '.$this->db->escape_identifiers($table);
+
+		if ($if_exists === FALSE)
+		{
+			return $sql;
+		}
+
+		$query = $this->db->query('SELECT "TABLE_NAME" FROM "ALL_TABLES" WHERE "TABLE_NAME" = '.$this->db->escape($table));
+		$query = $query->row_array();
+
+		return empty($query) ? TRUE : $sql;
 	}
 
 	// --------------------------------------------------------------------

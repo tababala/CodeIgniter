@@ -26,35 +26,26 @@
  */
 
 /**
- * PDO Forge Class
+ * PDO MySQL Forge Class
  *
  * @category	Database
  * @author		EllisLab Dev Team
- * @link		http://codeigniter.com/database/
+ * @link		http://codeigniter.com/user_guide/database/
  */
-class CI_DB_pdo_forge extends CI_DB_forge {
+class CI_DB_pdo_mysql_forge extends CI_DB_pdo_forge {
+
+	protected $_create_database = 'CREATE DATABASE %s CHARACTER SET %s COLLATE %s';
 
 	/**
-	 * Create Table
+	 * Process Fields
 	 *
-	 * @param	string	the table name
-	 * @param	array	the fields
-	 * @param	mixed	primary key(s)
-	 * @param	mixed	key(s)
-	 * @param	bool	should 'IF NOT EXISTS' be added to the SQL
-	 * @return	bool
+	 * @param	mixed	the fields
+	 * @return	string
 	 */
-	protected function _create_table($table, $fields, $primary_keys, $keys, $if_not_exists)
+	protected function _process_fields($fields)
 	{
-		$sql = 'CREATE TABLE ';
-
-		if ($if_not_exists === TRUE)
-		{
-			$sql .= 'IF NOT EXISTS ';
-		}
-
-		$sql .= $this->db->escape_identifiers($table).' (';
 		$current_field_count = 0;
+		$sql = '';
 
 		foreach ($fields as $field => $attributes)
 		{
@@ -68,16 +59,31 @@ class CI_DB_pdo_forge extends CI_DB_forge {
 			else
 			{
 				$attributes = array_change_key_case($attributes, CASE_UPPER);
-				$numeric = array('SERIAL', 'INTEGER');
 
-				$sql .= "\n\t".$this->db->escape_identifiers($field).' '.$attributes['TYPE'];
+				$sql .= "\n\t".$this->db->escape_identifiers($field);
 
-				if ( ! empty($attributes['CONSTRAINT']))
+				empty($attributes['NAME']) OR $sql .= ' '.$this->db->escape_identifiers($attributes['NAME']).' ';
+
+				if ( ! empty($attributes['TYPE']))
 				{
-					// Exception for Postgre numeric which not too happy with constraint within those type
-					if ( ! ($this->db->subdriver === 'pgsql' && in_array($attributes['TYPE'], $numeric)))
+					$sql .= ' '.$attributes['TYPE'];
+
+					if ( ! empty($attributes['CONSTRAINT']))
 					{
-						$sql .= '('.$attributes['CONSTRAINT'].')';
+						switch (strtolower($attributes['TYPE']))
+						{
+							case 'decimal':
+							case 'float':
+							case 'numeric':
+								$sql .= '('.implode(',', $attributes['CONSTRAINT']).')';
+								break;
+							case 'enum':
+							case 'set':
+								$sql .= '("'.implode('","', $attributes['CONSTRAINT']).'")';
+								break;
+							default:
+								$sql .= '('.$attributes['CONSTRAINT'].')';
+						}
 					}
 				}
 
@@ -107,66 +113,58 @@ class CI_DB_pdo_forge extends CI_DB_forge {
 			}
 		}
 
+		return $sql;
+	}
+
+	// --------------------------------------------------------------------
+
+	/**
+	 * Create Table
+	 *
+	 * @param	string	the table name
+	 * @param	mixed	the fields
+	 * @param	mixed	primary key(s)
+	 * @param	mixed	key(s)
+	 * @param	bool	should 'IF NOT EXISTS' be added to the SQL
+	 * @return	bool
+	 */
+	protected function _create_table($table, $fields, $primary_keys, $keys, $if_not_exists)
+	{
+		$sql = 'CREATE TABLE ';
+
+		if ($if_not_exists === TRUE)
+		{
+			$sql .= 'IF NOT EXISTS ';
+		}
+
+		$sql .= $this->db->escape_identifiers($table).' ('.$this->_process_fields($fields);
+
 		if (count($primary_keys) > 0)
 		{
-			$sql .= ",\n\tPRIMARY KEY (".implode(', ', $this->db->escape_identifiers($primary_keys)).')';
+			$key_name = $this->db->escape_identifiers(implode('_', $primary_keys));
+			$sql .= ",\n\tPRIMARY KEY ".$key_name.' ('.implode(', ', $this->db->escape_identifiers($primary_keys)).')';
 		}
 
 		if (is_array($keys) && count($keys) > 0)
 		{
 			foreach ($keys as $key)
 			{
-				$key = is_array($key)
-					? $this->db->escape_identifiers($key)
-					: array($this->db->escape_identifiers($key));
+				if (is_array($key))
+				{
+					$key_name = $this->db->escape_identifiers(implode('_', $key));
+					$key = $this->db->escape_identifiers($key);
+				}
+				else
+				{
+					$key_name = $this->db->escape_identifiers($key);
+					$key = array($key_name);
+				}
 
-				$sql .= ",\n\tFOREIGN KEY (".implode(', ', $key).')';
+				$sql .= ",\n\tKEY ".$key_name.' ('.implode(', ', $key).')';
 			}
 		}
 
-		return $sql."\n)";
-	}
-
-	// --------------------------------------------------------------------
-
-	/**
-	 * Drop Table
-	 *
-	 * Generates a platform-specific DROP TABLE string
-	 *
-	 * @param	string	the table name
-	 * @param	bool
-	 * @return	string
-	 */
-	protected function _drop_table($table, $if_exists)
-	{
-		$sql = 'DROP TABLE '.$this->db->escape_identifiers($table);
-
-		if ($if_exists === FALSE)
-		{
-			return $sql;
-		}
-		elseif ($this->db->subdriver === '4d')
-		{
-			return parent::_drop_table($table, $if_exists);
-		}
-		elseif ($this->db->subdriver === 'informix')
-		{
-			$query = 'SELECT "tabname" FROM "syscat"."tables" WHERE "tabid" > 99 AND "type" = \'T\' AND "tabname" = ';
-		}
-		elseif ($this->db->subdriver === 'ibm')
-		{
-			$query = 'SELECT "tabname" FROM "syscat"."tables" WHERE "type" = \'T\' AND "tabname" = ';
-		}
-		else
-		{
-			return FALSE;
-		}
-
-		$query = $this->db->query($query.$this->db->escape($table));
-		$query = $query->row_array();
-
-		return empty($query) ? TRUE : $sql;
+		return $sql."\n) DEFAULT CHARACTER SET ".$this->db->char_set.' COLLATE '.$this->db->dbcollat.';';
 	}
 
 	// --------------------------------------------------------------------
@@ -179,30 +177,25 @@ class CI_DB_pdo_forge extends CI_DB_forge {
 	 *
 	 * @param	string	the ALTER type (ADD, DROP, CHANGE)
 	 * @param	string	the column name
-	 * @param	string	the table name
-	 * @param	string	the column definition
-	 * @param	string	the default value
-	 * @param	bool	should 'NOT NULL' be added
+	 * @param	array	fields
 	 * @param	string	the field after which we should add the new field
 	 * @return	string
 	 */
-	protected function _alter_table($alter_type, $table, $column_name, $column_definition = '', $default_value = '', $null = '', $after_field = '')
+	protected function _alter_table($alter_type, $table, $fields, $after_field = '')
 	{
-		$sql = 'ALTER TABLE '.$this->db->escape_identifiers($table).' '.$alter_type.' '.$this->db->escape_identifiers($column_name);
+		$sql = 'ALTER TABLE '.$this->db->escape_identifiers($table).' '.$alter_type.' ';
 
 		// DROP has everything it needs now.
 		if ($alter_type === 'DROP')
 		{
-			return $sql;
+			return $sql.$this->db->escape_identifiers($fields);
 		}
 
-		return $sql .' '.$column_definition
-			.($default_value !== '' ? " DEFAULT '".$default_value."'" : '')
-			.($null === NULL ? ' NULL' : ' NOT NULL')
+		return $sql.$this->_process_fields($fields)
 			.($after_field !== '' ? ' AFTER '.$this->db->escape_identifiers($after_field) : '');
 	}
 
 }
 
-/* End of file pdo_forge.php */
-/* Location: ./system/database/drivers/pdo/pdo_forge.php */
+/* End of file pdo_mysql_forge.php */
+/* Location: ./system/database/drivers/pdo/subdrivers/pdo_mysql_forge.php */

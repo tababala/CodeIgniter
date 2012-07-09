@@ -34,8 +34,6 @@
  */
 class CI_DB_mssql_forge extends CI_DB_forge {
 
-	protected $_drop_table	= 'DROP TABLE %s';
-
 	/**
 	 * Create Table
 	 *
@@ -119,6 +117,26 @@ class CI_DB_mssql_forge extends CI_DB_forge {
 		}
 
 		return $sql."\n)";
+	}
+
+	// --------------------------------------------------------------------
+
+	/**
+	 * Drop Table
+	 *
+	 * Generates a platform-specific DROP TABLE string
+	 *
+	 * @param	string	the table name
+	 * @param	bool
+	 * @return	string
+	 */
+	protected function _drop_table($table, $if_exists)
+	{
+		$sql = 'DROP TABLE '.$this->db->escape_identifiers($table);
+
+		return ($if_exists)
+			? "IF EXISTS (SELECT * FROM sysobjects WHERE ID = object_id(N'".$table."') AND OBJECTPROPERTY(id, N'IsUserTable') = 1) ".$sql;
+			: $sql;
 	}
 
 	// --------------------------------------------------------------------
