@@ -44,6 +44,11 @@ abstract class CI_DB_forge {
 	protected $_drop_database	= 'DROP DATABASE %s';
 	protected $_rename_table	= 'ALTER TABLE %s RENAME TO %s';
 
+	/**
+	 * Constructor
+	 *
+	 * @return	void
+	 */
 	public function __construct()
 	{
 		// Assign the main database object to $this->db

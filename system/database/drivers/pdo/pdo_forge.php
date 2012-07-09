@@ -35,6 +35,31 @@
 class CI_DB_pdo_forge extends CI_DB_forge {
 
 	/**
+	 * Constructor
+	 *
+	 * @return	void
+	 */
+	public function __construct()
+	{
+		parent::__construct();
+
+		if (in_array($this->db->subdriver, array('ibm', 'informix'), TRUE))
+		{
+			$this->_rename_table = 'RENAME TABLE %s TO %s';
+		}
+		elseif ($this->db->subdriver === '4d')
+		{
+			$this->_rename_table = 'ALTER SCHEMA %s RENAME TO %s';
+		}
+		elseif ($this->db->subdriver === 'firebird')
+		{
+			$this->_rename_table = FALSE;
+		}
+	}
+
+	// --------------------------------------------------------------------
+
+	/**
 	 * Create Table
 	 *
 	 * @param	string	the table name

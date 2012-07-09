@@ -34,6 +34,8 @@
  */
 class CI_DB_ibase_forge extends CI_DB_forge {
 
+	protected $_rename_table = FALSE;
+
 	/**
 	 * Create database
 	 *
