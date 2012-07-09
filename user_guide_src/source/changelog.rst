@@ -138,6 +138,7 @@ Release Date: Not Released
    -  Added PDO support for ``list_fields()`` in :doc:`Database Results <database/results>`.
    -  Added capability for packages to hold database.php config files 
    -  Added subdrivers support (currently only used by PDO).
+   -  Added an optional second parameter to ``drop_table()`` in :doc:`Database Forge <database/forge>` that allows adding the IF EXISTS clause.
 
 -  Libraries
 

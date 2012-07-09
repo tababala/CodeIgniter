@@ -55,8 +55,29 @@ Step 6: Check the calls to Array Helper's element() and elements() functions
 The default return value of these functions, when the required elements
 don't exist, has been changed from FALSE to NULL.
 
+************************************************************
+Step 7: Update usage of Database Forge's drop_table() method
+************************************************************
+
+Up until now, ``drop_table()`` added an IF EXISTS clause by default or it didn't work at all
+with some drivers. In CodeIgniter 3.0.0, the IF EXISTS clause is no longer added by deafault
+and has an optional second parameter that allows that instead and is set to FALSE by default.
+
+If your application relies on IF EXISTS, you'll have to change its usage.
+
+::
+
+	// Now produces just DROP TABLE `table_name`
+	$this->dbforge->drop_table('table_name');
+
+	// Produces DROP TABLE IF EXISTS `table_name`
+	$this->dbforge->drop_table('table_name', TRUE);
+
+.. note:: The given example users MySQL-specific syntax, but it should work across all drivers
+	with the exception of ODBC.
+
 ***************************************************************
-Step 7: Remove usage of (previously) deprecated functionalities
+Step 8: Remove usage of (previously) deprecated functionalities
 ***************************************************************
 
 In addition to the ``$autoload['core']`` configuration setting, there's a number of other functionalities
