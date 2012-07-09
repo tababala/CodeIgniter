@@ -35,149 +35,34 @@
 class CI_DB_pdo_pgsql_forge extends CI_DB_pdo_forge {
 
 	/**
-	 * Process Fields
-	 *
-	 * @param	mixed	the fields
-	 * @return	string
-	 */
-	protected function _process_fields($fields, $primary_keys = array())
-	{
-		$sql = '';
-		$current_field_count = 0;
-
-		foreach ($fields as $field => $attributes)
-		{
-			// Numeric field names aren't allowed in databases, so if the key is
-			// numeric, we know it was assigned by PHP and the developer manually
-			// entered the field information, so we'll simply add it to the list
-			if (is_numeric($field))
-			{
-				$sql .= "\n\t".$attributes;
-			}
-			else
-			{
-				$sql .= "\n\t".$this->db->escape_identifiers($field);
-
-				$attributes = array_change_key_case($attributes, CASE_UPPER);
-				$is_unsigned = ( ! empty($attributes['UNSIGNED']) && $attributes['UNSIGNED'] === TRUE);
-
-				// Convert datatypes to be PostgreSQL-compatible
-				switch (strtoupper($attributes['TYPE']))
-				{
-					case 'TINYINT':
-						$attributes['TYPE'] = 'SMALLINT';
-						break;
-					case 'SMALLINT':
-						$attributes['TYPE'] = ($is_unsigned) ? 'INTEGER' : 'SMALLINT';
-						break;
-					case 'MEDIUMINT':
-						$attributes['TYPE'] = 'INTEGER';
-						break;
-					case 'INT':
-						$attributes['TYPE'] = ($is_unsigned) ? 'BIGINT' : 'INTEGER';
-						break;
-					case 'BIGINT':
-						$attributes['TYPE'] = ($is_unsigned) ? 'NUMERIC' : 'BIGINT';
-						break;
-					case 'DOUBLE':
-						$attributes['TYPE'] = 'DOUBLE PRECISION';
-						break;
-					case 'DATETIME':
-						$attributes['TYPE'] = 'TIMESTAMP';
-						break;
-					case 'LONGTEXT':
-						$attributes['TYPE'] = 'TEXT';
-						break;
-					case 'BLOB':
-						$attributes['TYPE'] = 'BYTEA';
-						break;
-					default:
-						break;
-				}
-
-				// If this is an auto-incrementing primary key, use the serial data type instead
-				$sql .= (in_array($field, $primary_keys) && ! empty($attributes['AUTO_INCREMENT']) && $attributes['AUTO_INCREMENT'] === TRUE)
-					? ' SERIAL' : ' '.$attributes['TYPE'];
-
-				// Modified to prevent constraints with integer data types
-				if ( ! empty($attributes['CONSTRAINT']) && strpos($attributes['TYPE'], 'INT') === FALSE)
-				{
-					$sql .= '('.$attributes['CONSTRAINT'].')';
-				}
-
-				if (isset($attributes['DEFAULT']))
-				{
-					$sql .= " DEFAULT '".$attributes['DEFAULT']."'";
-				}
-
-				$sql .= ( ! empty($attributes['NULL']) && $attributes['NULL'] === TRUE)
-					? ' NULL' : ' NOT NULL';
-
-				// Added new attribute to create unique fields. Also works with MySQL
-				if ( ! empty($attributes['UNIQUE']) && $attributes['UNIQUE'] === TRUE)
-				{
-					$sql .= ' UNIQUE';
-				}
-			}
-
-			// don't add a comma on the end of the last field
-			if (++$current_field_count < count($fields))
-			{
-				$sql .= ',';
-			}
-		}
-
-		return $sql;
-	}
-
-	// --------------------------------------------------------------------
-
-	/**
 	 * Create Table
 	 *
 	 * @param	string	the table name
-	 * @param	array	the fields
-	 * @param	mixed	primary key(s)
-	 * @param	mixed	key(s)
 	 * @param	bool	should 'IF NOT EXISTS' be added to the SQL
-	 * @return	bool
+	 * @return	mixed
 	 */
-	protected function _create_table($table, $fields, $primary_keys, $keys, $if_not_exists)
+	protected function _create_table($table, $if_not_exists)
 	{
 		$sql = 'CREATE TABLE ';
 
-		// PostgreSQL doesn't support IF NOT EXISTS syntax so we check if table exists manually
-		if ($if_not_exists === TRUE && $this->db->table_exists($table))
+		if ($if_not_exists === TRUE)
 		{
-			return TRUE;
-		}
-
-		$sql .= $this->db->escape_identifiers($table).' ('.$this->_process_fields($fields, $primary_keys);
-
-		if (count($primary_keys) > 0)
-		{
-			$sql .= ",\n\tPRIMARY KEY (".implode(', ', $this->db->escape_identifiers($primary_keys)).')';
-		}
-
-		$sql .= "\n);";
-
-		if (is_array($keys) && count($keys) > 0)
-		{
-			foreach ($keys as $key)
+			// Supported as of PostgreSQL 9.1
+			if (version_compare($this->db->version(), '9.0', '>'))
 			{
-				$key = is_array($key)
-					? $this->db->escape_identifiers($key)
-					: array($this->db->escape_identifiers($key));
-
-				foreach ($key as $field)
-				{
-					$sql .= "\nCREATE INDEX ".$this->db->escape_identifiers($table.'_'.str_replace(array('"', "'"), '', $field).'_index')
-						.' ON '.$this->db->escape_identifiers($table).' ('.$this->db->escape_identifiers($field).');';
-				}
+				$sql .= 'IF NOT EXISTS ';
+			}
+			elseif ($this->db->table_exists($table))
+			{
+				return TRUE;
 			}
 		}
 
-		return $sql;
+		return $sql
+			.$this->db->escape_identifiers($table).' ('
+			.$this->_process_fields()
+			.$this->_process_primary_keys()
+			."\n);";
 	}
 
 	// --------------------------------------------------------------------
@@ -207,9 +92,143 @@ class CI_DB_pdo_pgsql_forge extends CI_DB_pdo_forge {
  			return $sql.$this->db->escape_identifiers($fields);
  		}
 
- 		return $sql.$this->_process_fields($fields)
+ 		return $sql.$this->_process_fields()
 			.($after_field !== '' ? ' AFTER '.$this->db->escape_identifiers($after_field) : '');
  	}
+
+	// --------------------------------------------------------------------
+
+	/**
+	 * Process fields
+	 *
+	 * @return	string
+	 */
+	protected function _process_fields()
+	{
+		foreach ($this->fields as $field => $attributes)
+		{
+			$attrs = array_change_key_case($attributes, CASE_UPPER);
+
+			if (empty($attributes['TYPE']))
+			{
+				unset($this->fields[$field]);
+				continue;
+			}
+
+			$this->fields[$field] = empty($attributes['NAME'])
+						? "\n\t".$this->db->escape_identifiers($field)
+						: "\n\t".$this->db->escape_identifiers($attributes['NAME']);
+
+			if (empty($attributes['UNSIGNED']) OR $attributes['UNSIGNED'] !== TRUE)
+			{
+				$attributes['UNSIGNED'] = FALSE;
+			}
+
+			switch (strtoupper($attributes['TYPE']))
+			{
+				case 'MEDIUMINT':
+					$attributes['TYPE'] = 'INTEGER';
+					$attributes['UNSIGNED'] = FALSE;
+				case 'TINYINT':
+					if ($attributes['UNSIGNED']) === TRUE)
+					{
+						$attributes['TYPE'] = 'SMALLINT';
+						$attributes['UNSIGNED'] = FALSE;
+					}
+				case 'INT2':
+				case 'SMALLINT':
+					if ($attributes['UNSIGNED']) === TRUE)
+					{
+						$attributes['TYPE'] = 'INTEGER';
+						$attributes['UNSIGNED'] = FALSE;
+					}
+				case 'INT':
+				case 'INT4':
+				case 'INTEGER':
+					if ($attributes['UNSIGNED']) === TRUE)
+					{
+						$attributes['TYPE'] = 'BIGINT';
+						$attributes['UNSIGNED'] = FALSE;
+					}
+
+					// AUTO_INCREMENT in PostgreSQL is implemented via the SERIAL data type
+					if ( ! empty($attributes['AUTO_INCREMENT']) && $attributes['AUTO_INCREMENT'] === TRUE)
+					{
+						$attributes['TYPE'] = 'SERIAL';
+						$attributes['AUTO_INCREMENT'] = FALSE;
+					}
+				case 'INT8':
+				case 'BIGINT':
+					if ($attributes['UNSIGNED'] === TRUE)
+					{
+						$attributes['TYPE'] = 'NUMERIC';
+						$attributes['UNSIGNED'] = FALSE;
+					}
+
+					// And there's BIGSERIAL as well
+					if ( ! empty($attributes['AUTO_INCREMENT']) && $attributes['AUTO_INCREMENT'] === TRUE)
+					{
+						$attributes['TYPE'] = 'BIGSERIAL';
+						$attributes['AUTO_INCREMENT'] = FALSE;
+					}
+				case 'CHAR':
+				case 'CHARACTER':
+				case 'VARCHAR':
+				case 'CHARACTER VARYING':
+					empty($attributes['CONSTRAINT']) OR $attributes['CONSTRAINT'] = (int) $attributes['CONSTRAINT'];
+					break;
+				case 'DECIMAL':
+				case 'NUMERIC':
+					if ( ! empty($attributes['CONSTRAINT']) && is_array($attributes['CONSTRAINT']))
+					{
+						$attributes['CONSTRAINT'] = implode(',', $attributes['CONSTRAINT']);
+					}
+					break;
+				case 'DOUBLE':
+					$attributes['TYPE'] = 'DOUBLE PRECISION';
+					break;
+				case 'DATETIME':
+					$attributes['TYPE'] = 'TIMESTAMP';
+					break;
+				case 'LONGTEXT':
+					$attributes['TYPE'] = 'TEXT';
+					break;
+				case 'BLOB':
+					$attributes['TYPE'] = 'BYTEA';
+					break;
+				case 'SET':
+				case 'ENUM':
+					$attributes['TYPE'] = 'ENUM';
+					empty($attributes['CONSTRAINT']) OR $attributes['CONSTRAINT'] = implode(',', $this->db->escape($attributes['CONSTRAINT']));
+					break;
+				default:
+					break;
+			}
+
+			$this->fields[$field] .= ' '.$attributes['TYPE'];
+			empty($attributes['CONSTRAINT']) OR $this->fields[$field] .= '('.$attributes['CONSTRAINT'].')';
+
+			if (isset($attributes['DEFAULT']))
+			{
+				$this->fields[$field] .= ' DEFAULT '.$this->db->escape($attributes['DEFAULT']);
+			}
+
+			$this->fields[$field] .= (empty($attributes['NULL']) && $attributes['NULL'] === TRUE)
+						? ' NULL' : ' NOT NULL';
+
+			if ( ! empty($attributes['UNIQUE']) && $attributes['UNIQUE'] === TRUE)
+			{
+				$this->fields[$field] .= ' UNIQUE';
+			}
+		}
+
+		if (empty($this->fields))
+		{
+			return FALSE;
+		}
+
+		return implode(',', $this->fields);
+	}
 
 }
 

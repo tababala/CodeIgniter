@@ -87,26 +87,30 @@ class CI_DB_pdo_sqlite_forge extends CI_DB_pdo_forge {
 	 * Create Table
 	 *
 	 * @param	string	the table name
-	 * @param	array	the fields
-	 * @param	mixed	primary key(s)
-	 * @param	mixed	key(s)
 	 * @param	bool	should 'IF NOT EXISTS' be added to the SQL
-	 * @return	bool
+	 * @return	mixed
 	 */
-	protected function _create_table($table, $fields, $primary_keys, $keys, $if_not_exists)
+	protected function _create_table($table, $if_not_exists)
 	{
 		$sql = 'CREATE TABLE ';
 
-		// IF NOT EXISTS added to SQLite in 3.3.0
-		if ($if_not_exists === TRUE && version_compare($this->db->version(), '3.3.0', '>=') === TRUE)
+		if ($if_not_exists === TRUE)
 		{
-			$sql .= 'IF NOT EXISTS ';
+			// Supported as of SQLite 3.3.0
+			if (version_compare($this->db->version(), '3.3.0', '>='))
+			{
+				$sql .= 'IF NOT EXISTS ';
+			}
+			elseif ($this->db->table_exists($table))
+			{
+				return TRUE;
+			}
 		}
 
 		$sql .= $this->db->escape_identifiers($table).' (';
 		$current_field_count = 0;
 
-		foreach ($fields as $field => $attributes)
+		foreach ($this->fields as $field => $attributes)
 		{
 			// Numeric field names aren't allowed in databases, so if the key is
 			// numeric, we know it was assigned by PHP and the developer manually
@@ -143,30 +147,15 @@ class CI_DB_pdo_sqlite_forge extends CI_DB_pdo_forge {
 			}
 
 			// don't add a comma on the end of the last field
-			if (++$current_field_count < count($fields))
+			if (++$current_field_count < count($this->fields))
 			{
 				$sql .= ',';
 			}
 		}
 
-		if (count($primary_keys) > 0)
-		{
-			$sql .= ",\n\tPRIMARY KEY (".implode(', ', $this->db->escape_identifiers($primary_keys)).')';
-		}
-
-		if (is_array($keys) && count($keys) > 0)
-		{
-			foreach ($keys as $key)
-			{
-				$key = is_array($key)
-					? $this->db->escape_identifiers($key)
-					: array($this->db->escape_identifiers($key));
-
-				$sql .= ",\n\tUNIQUE (".implode(', ', $key).')';
-			}
-		}
-
-		return $sql."\n)";
+		return $sql
+			.$this->_process_primary_keys()
+			."\n)";
 	}
 
 	// --------------------------------------------------------------------

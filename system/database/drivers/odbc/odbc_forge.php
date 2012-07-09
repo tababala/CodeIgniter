@@ -38,25 +38,20 @@ class CI_DB_odbc_forge extends CI_DB_forge {
 	 * Create Table
 	 *
 	 * @param	string	the table name
-	 * @param	array	the fields
-	 * @param	mixed	primary key(s)
-	 * @param	mixed	key(s)
 	 * @param	bool	should 'IF NOT EXISTS' be added to the SQL
-	 * @return	bool
+	 * @return	string
 	 */
-	protected function _create_table($table, $fields, $primary_keys, $keys, $if_not_exists)
+	protected function _create_table($table, $if_not_exists)
 	{
-		$sql = 'CREATE TABLE ';
-
-		if ($if_not_exists === TRUE)
+		if ($if_not_exists === TRUE && $this->db->table_exists($table))
 		{
-			$sql .= 'IF NOT EXISTS ';
+			return TRUE;
 		}
 
-		$sql .= $this->db->escape_identifiers($table).' (';
-		$current_field_count = 0;
+		$sql = 'CREATE TABLE '.$this->db->escape_identifiers($table).' (';
 
-		foreach ($fields as $field => $attributes)
+		$current_field_count = 0;
+		foreach ($this->fields as $field => $attributes)
 		{
 			// Numeric field names aren't allowed in databases, so if the key is
 			// numeric, we know it was assigned by PHP and the developer manually
@@ -93,30 +88,15 @@ class CI_DB_odbc_forge extends CI_DB_forge {
 			}
 
 			// don't add a comma on the end of the last field
-			if (++$current_field_count < count($fields))
+			if (++$current_field_count < count($this->fields))
 			{
 				$sql .= ',';
 			}
 		}
 
-		if (count($primary_keys) > 0)
-		{
-			$sql .= ",\n\tPRIMARY KEY (".implode(', ', $this->escape_identifiers($primary_keys)).')';
-		}
-
-		if (is_array($keys) && count($keys) > 0)
-		{
-			foreach ($keys as $key)
-			{
-				$key = is_array($key)
-					? $this->db->escape_identifiers($key)
-					: array($this->db->escape_identifiers($key));
-
-				$sql .= ",\n\tFOREIGN KEY (".implode(', ', $key).')';
-			}
-		}
-
-		return $sql."\n)";
+		return $sql
+			.$this->_process_primary_keys()
+			."\n);";
 	}
 
 	// --------------------------------------------------------------------
@@ -128,13 +108,16 @@ class CI_DB_odbc_forge extends CI_DB_forge {
 	 *
 	 * @param	string	the table name
 	 * @param	bool
-	 * @return	string
+	 * @return	mixed
 	 */
 	protected function _drop_table($table, $if_exists)
 	{
-		return ($if_exists === FALSE)
-			? 'DROP TABLE '.$this->db->escape_identifiers($table)
-			: FALSE;
+		if ($if_exists && ! $this->db->table_exists($table))
+		{
+			return TRUE;
+		}
+
+		return 'DROP TABLE '.$this->db->escape_identifiers($table);
 	}
 
 	// --------------------------------------------------------------------

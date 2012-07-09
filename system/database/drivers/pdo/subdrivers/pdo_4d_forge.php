@@ -21,18 +21,22 @@
  * @copyright	Copyright (c) 2008 - 2012, EllisLab, Inc. (http://ellislab.com/)
  * @license		http://opensource.org/licenses/OSL-3.0 Open Software License (OSL 3.0)
  * @link		http://codeigniter.com
- * @since		Version 2.0.3
+ * @since		Version 2.1.0
  * @filesource
  */
 
 /**
- * SQLSRV Forge Class
+ * PDO 4D Forge Class
  *
  * @category	Database
  * @author		EllisLab Dev Team
  * @link		http://codeigniter.com/user_guide/database/
  */
-class CI_DB_sqlsrv_forge extends CI_DB_forge {
+class CI_DB_pdo_4d_forge extends CI_DB_4d_forge {
+
+	protected $_create_database	= 'CREATE SCHEMA %s';
+	protected $_drop_database	= 'DROP SCHEMA %s';
+	protected $_rename_table	= FALSE;
 
 	/**
 	 * Create Table
@@ -43,13 +47,16 @@ class CI_DB_sqlsrv_forge extends CI_DB_forge {
 	 */
 	protected function _create_table($table, $if_not_exists)
 	{
-		$sql = ($if_not_exists === TRUE)
-			? "IF NOT EXISTS (SELECT * FROM sysobjects WHERE ID = object_id(N'".$table."') AND OBJECTPROPERTY(id, N'IsUserTable') = 1)\n"
-			: '';
+		$sql = 'CREATE TABLE ';
 
-		$sql .= 'CREATE TABLE '.$this->db->escape_identifiers($table).' (';
+		if ($if_not_exists === TRUE)
+		{
+			$sql .= 'IF NOT EXISTS ';
+		}
 
+		$sql .= $this->db->escape_identifiers($table).' (';
 		$current_field_count = 0;
+
 		foreach ($this->fields as $field => $attributes)
 		{
 			// Numeric field names aren't allowed in databases, so if the key is
@@ -65,12 +72,7 @@ class CI_DB_sqlsrv_forge extends CI_DB_forge {
 
 				$sql .= "\n\t".$this->db->escape_identifiers($field).' '.$attributes['TYPE'];
 
-				if (stripos($attributes['TYPE'], 'INT') === FALSE && ! empty($attributes['CONSTRAINT']))
-				{
-					$sql .= '('.$attributes['CONSTRAINT'].')';
-				}
-
-				if ( ! empty($attributes['UNSIGNED']) && $attributes['UNSIGNED'] === TRUE)
+				if (isset($attributes['UNSINGED']) && $attributes['UNSIGNED'] === TRUE)
 				{
 					$sql .= ' UNSIGNED';
 				}
@@ -80,13 +82,10 @@ class CI_DB_sqlsrv_forge extends CI_DB_forge {
 					$sql .= " DEFAULT '".$attributes['DEFAULT']."'";
 				}
 
-				$sql .= ( ! empty($attributes['NULL']) && $attribues['NULL'] === TRUE)
-					? ' NULL' : ' NOT NULL';
+				$sql .= (isset($attributes['NULL']) && $attributes['NULL'] === TRUE)
+					? '' : ' NOT NULL';
 
-				if ( ! empty($attributes['AUTO_INCREMENT']) && $attributes['AUTO_INCREMENT'] === TRUE)
-				{
-					$sql .= ' AUTO_INCREMENT';
-				}
+				empty($attributes['CONSTRAINT']) OR ' CONSTRAINT '.$attributes['CONSTRAINT'];
 			}
 
 			// don't add a comma on the end of the last field
@@ -98,27 +97,7 @@ class CI_DB_sqlsrv_forge extends CI_DB_forge {
 
 		return $sql
 			.$this->_process_primary_keys()
-			."\n);";
-	}
-
-	// --------------------------------------------------------------------
-
-	/**
-	 * Drop Table
-	 *
-	 * Generates a platform-specific DROP TABLE string
-	 *
-	 * @param	string	the table name
-	 * @param	bool
-	 * @return	string
-	 */
-	protected function _drop_table($table, $if_exists)
-	{
-		$sql = 'DROP TABLE '.$this->db->escape_identifiers($table);
-
-		return ($if_exists)
-			? "IF EXISTS (SELECT * FROM sysobjects WHERE ID = object_id(N'".$table."') AND OBJECTPROPERTY(id, N'IsUserTable') = 1) ".$sql;
-			: $sql;
+			."\n)";
 	}
 
 	// --------------------------------------------------------------------
@@ -149,12 +128,13 @@ class CI_DB_sqlsrv_forge extends CI_DB_forge {
 		}
 
 		return $sql.' '.$column_definition
-			.($default_value != '' ? ' DEFAULT "'.$default_value.'"' : '')
+			.($default_value !== '' ? ' DEFAULT "'.$default_value.'"' : '')
 			.($null === NULL ? ' NULL' : ' NOT NULL')
-			.($after_field != '' ? ' AFTER '.$this->db->escape_identifiers($after_field) : '');
+			.($after_field !== '' ? ' AFTER '.$this->db->escape_identifiers($after_field) : '');
+
 	}
 
 }
 
-/* End of file sqlsrv_forge.php */
-/* Location: ./system/database/drivers/sqlsrv/sqlsrv_forge.php */
+/* End of file pdo_4d_forge.php */
+/* Location: ./system/database/drivers/pdo/subdrivers/pdo_4d_forge.php */

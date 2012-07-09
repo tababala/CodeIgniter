@@ -21,35 +21,40 @@
  * @copyright	Copyright (c) 2008 - 2012, EllisLab, Inc. (http://ellislab.com/)
  * @license		http://opensource.org/licenses/OSL-3.0 Open Software License (OSL 3.0)
  * @link		http://codeigniter.com
- * @since		Version 2.0.3
+ * @since		Version 2.1.0
  * @filesource
  */
 
 /**
- * SQLSRV Forge Class
+ * PDO Informix Forge Class
  *
  * @category	Database
  * @author		EllisLab Dev Team
  * @link		http://codeigniter.com/user_guide/database/
  */
-class CI_DB_sqlsrv_forge extends CI_DB_forge {
+class CI_DB_pdo_informix_forge extends CI_DB_pdo_forge {
+
+	protected $_rename_table	= 'RENAME TABLE %s TO %s';
 
 	/**
 	 * Create Table
 	 *
 	 * @param	string	the table name
 	 * @param	bool	should 'IF NOT EXISTS' be added to the SQL
-	 * @return	string
+	 * @return	mixed
 	 */
 	protected function _create_table($table, $if_not_exists)
 	{
-		$sql = ($if_not_exists === TRUE)
-			? "IF NOT EXISTS (SELECT * FROM sysobjects WHERE ID = object_id(N'".$table."') AND OBJECTPROPERTY(id, N'IsUserTable') = 1)\n"
-			: '';
+		if ($if_not_exists === TRUE && $this->db->table_exists($table))
+		{
+			return TRUE;
+		}
 
-		$sql .= 'CREATE TABLE '.$this->db->escape_identifiers($table).' (';
+		$sql = 'CREATE TABLE ';
 
+		$sql .= $this->db->escape_identifiers($table).'(';
 		$current_field_count = 0;
+
 		foreach ($this->fields as $field => $attributes)
 		{
 			// Numeric field names aren't allowed in databases, so if the key is
@@ -65,10 +70,7 @@ class CI_DB_sqlsrv_forge extends CI_DB_forge {
 
 				$sql .= "\n\t".$this->db->escape_identifiers($field).' '.$attributes['TYPE'];
 
-				if (stripos($attributes['TYPE'], 'INT') === FALSE && ! empty($attributes['CONSTRAINT']))
-				{
-					$sql .= '('.$attributes['CONSTRAINT'].')';
-				}
+				empty($attributes['CONSTRAINT']) OR $sql .= '('.$attributes['CONSTRAINT'].')';
 
 				if ( ! empty($attributes['UNSIGNED']) && $attributes['UNSIGNED'] === TRUE)
 				{
@@ -80,7 +82,7 @@ class CI_DB_sqlsrv_forge extends CI_DB_forge {
 					$sql .= " DEFAULT '".$attributes['DEFAULT']."'";
 				}
 
-				$sql .= ( ! empty($attributes['NULL']) && $attribues['NULL'] === TRUE)
+				$sql .= ( ! empty($attributes['NULL']) && $attributes['NULL'] === TRUE)
 					? ' NULL' : ' NOT NULL';
 
 				if ( ! empty($attributes['AUTO_INCREMENT']) && $attributes['AUTO_INCREMENT'] === TRUE)
@@ -110,15 +112,16 @@ class CI_DB_sqlsrv_forge extends CI_DB_forge {
 	 *
 	 * @param	string	the table name
 	 * @param	bool
-	 * @return	string
+	 * @return	mixed
 	 */
 	protected function _drop_table($table, $if_exists)
 	{
-		$sql = 'DROP TABLE '.$this->db->escape_identifiers($table);
+		if ($if_exists === TRUE && ! $this->db->table_exists($table))
+		{
+			return TRUE;
+		}
 
-		return ($if_exists)
-			? "IF EXISTS (SELECT * FROM sysobjects WHERE ID = object_id(N'".$table."') AND OBJECTPROPERTY(id, N'IsUserTable') = 1) ".$sql;
-			: $sql;
+		return 'DROP TABLE '.$this->db->escape_identifiers($table);
 	}
 
 	// --------------------------------------------------------------------
@@ -140,21 +143,14 @@ class CI_DB_sqlsrv_forge extends CI_DB_forge {
 	 */
 	protected function _alter_table($alter_type, $table, $column_name, $column_definition = '', $default_value = '', $null = '', $after_field = '')
 	{
-		$sql = 'ALTER TABLE '.$this->db->escape_identifiers($table).' '.$alter_type.' '.$this->db->escape_identifiers($column_name);
-
-		// DROP has everything it needs now.
-		if ($alter_type === 'DROP')
-		{
-			return $sql;
-		}
-
-		return $sql.' '.$column_definition
-			.($default_value != '' ? ' DEFAULT "'.$default_value.'"' : '')
+		return 'ALTER TABLE '.$this->db->escape_identifiers($table).' '.$alter_type.' '.$this->db->escape_identifiers($column_name)
+			.' '.$column_definition
+			.($default_value !== '' ? ' DEFAULT "'.$default_value.'"' : '')
 			.($null === NULL ? ' NULL' : ' NOT NULL')
-			.($after_field != '' ? ' AFTER '.$this->db->escape_identifiers($after_field) : '');
+			.($after_field !== '' ? ' AFTER '.$this->db->escape_identifiers($after_field) : '');
 	}
 
 }
 
-/* End of file sqlsrv_forge.php */
-/* Location: ./system/database/drivers/sqlsrv/sqlsrv_forge.php */
+/* End of file pdo_informix_forge.php */
+/* Location: ./system/database/drivers/pdo/subdrivers/pdo_informix_forge.php */

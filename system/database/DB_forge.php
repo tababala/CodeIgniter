@@ -211,6 +211,7 @@ abstract class CI_DB_forge {
 	 * Create Table
 	 *
 	 * @param	string	the table name
+	 * @param	bool	IF NOT EXISTS
 	 * @return	bool
 	 */
 	public function create_table($table = '', $if_not_exists = FALSE)
@@ -219,25 +220,42 @@ abstract class CI_DB_forge {
 		{
 			show_error('A table name is required for that operation.');
 		}
+		else
+		{
+			$table = $this->db->dbprefix.$table;
+		}
 
 		if (count($this->fields) === 0)
 		{
 			show_error('Field information is required.');
 		}
 
-		$sql = $this->_create_table($this->db->dbprefix.$table, $this->fields, $this->primary_keys, $this->keys, $if_not_exists);
-		$this->_reset();
+		$sql = $this->_create_table($table, $if_not_exists);
 
 		if (is_bool($sql))
 		{
-			return $sql;
+			$this->_reset();
+			if ($sql === FALSE)
+			{
+				return ($this->db->db_debug) ? $this->db->display_error('db_unsuported_feature') : FALSE;
+			}
 		}
 
 		if (($result = $this->db->query($sql)) !== FALSE && ! empty($this->db->data_cache['table_names']))
 		{
-			$this->db->data_cache['table_names'][] = $this->db->dbprefix.$table;
+			$this->db->data_cache['table_names'][] = $table;
 		}
 
+		// Most databases don't support creating indexes from within the CREATE TABLE statement
+		if ( ! empty($this->keys))
+		{
+			for ($i = 0, $sqls = $this->_process_indexes($table), $c = count($sqls); $i < $c; $i++)
+			{
+				$this->db->query($sqls[$i]);
+			}
+		}
+
+		$this->_reset();
 		return $result;
 	}
 
@@ -247,7 +265,7 @@ abstract class CI_DB_forge {
 	 * Drop Table
 	 *
 	 * @param	string	the table name
-	 * @param	bool	wether to add an IF EXISTS clause or not
+	 * @param	bool	IF EXISTS
 	 * @return	bool
 	 */
 	public function drop_table($table_name, $if_exists = FALSE)
@@ -443,6 +461,62 @@ abstract class CI_DB_forge {
 		}
 
 		return TRUE;
+	}
+
+	// --------------------------------------------------------------------
+
+	/**
+	 * Process primary keys
+	 *
+	 * @return	string
+	 */
+	protected function _process_primary_keys()
+	{
+		$sql = '';
+
+		for ($i = 0, $c = count($this->primary_keys); $i < $c; $i++)
+		{
+			isset($this->fields[$this->primary_keys[$i]]) OR unset($this->primary_keys[$i]);
+		}
+
+		if (count($primary_keys) > 0)
+		{
+			$sql .= ",\n\tCONSTRAINT ".$this->db->escape_identifiers('pk_'.implode('_', $this->primary_keys))
+				.' PRIMARY KEY('.implode(', ', $this->db->escape_identifiers($this->primary_keys)).')';
+		}
+
+		return $sql;
+	}
+
+	// --------------------------------------------------------------------
+
+	/**
+	 * Process indexes
+	 *
+	 * @param	string
+	 * @return	string
+	 */
+	protected function _process_indexes($table = NULL)
+	{
+		$table = $this->db->escape_identifiers($table);
+		$sqls = array();
+
+		for ($i = 0, $c = count($this->keys); $i < $c; $i++)
+		{
+			if ( ! isset($this->fields[$this->keys[$i]]))
+			{
+				unset($this->keys[$i]);
+				continue;
+			}
+
+			is_array($this->keys[$i]) OR $this->keys[$i] = array($this->keys[$i]);
+
+			$sqls[] = 'CREATE INDEX '.$this->db->escape_identifiers(implode('_', $this->keys[$i]))
+				.' ON '.$this->db->escape_identifiers($table)
+				.' ('.implode(', ', $this->db->escape_identifiers($this->keys[$i])).');';
+		}
+
+		return $sqls;
 	}
 
 	// --------------------------------------------------------------------

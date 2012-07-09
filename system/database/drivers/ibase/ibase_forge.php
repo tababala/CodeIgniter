@@ -57,8 +57,7 @@ class CI_DB_ibase_forge extends CI_DB_forge {
 	/**
 	 * Drop database
 	 *
-	 * @param	string	the database name
-	 *		- not used in this driver, the current db is dropped
+	 * @param	string	(ignored) the database name - the current db is dropped
 	 * @return	bool
 	 */
 	public function drop_database($db_name = '')
@@ -85,20 +84,20 @@ class CI_DB_ibase_forge extends CI_DB_forge {
 	 * Create Table
 	 *
 	 * @param	string	the table name
-	 * @param	array	the fields
-	 * @param	mixed	primary key(s)
-	 * @param	mixed	key(s)
 	 * @param	bool	should 'IF NOT EXISTS' be added to the SQL
-	 * @return	string
+	 * @return	mixed
 	 */
-	protected function _create_table($table, $fields, $primary_keys, $keys, $if_not_exists)
+	protected function _create_table($table, $if_not_exists)
 	{
-		$sql = 'CREATE TABLE ';
+		if ($if_not_exists === TRUE && $this->db->table_exists($table))
+		{
+			return TRUE;
+		}
 
-		$sql .= $this->db->escape_identifiers($table).'(';
+		$sql = 'CREATE TABLE '.$this->db->escape_identifiers($table).'(';
+
 		$current_field_count = 0;
-
-		foreach ($fields as $field => $attributes)
+		foreach ($this->fields as $field => $attributes)
 		{
 			// Numeric field names aren't allowed in databases, so if the key is
 			// numeric, we know it was assigned by PHP and the developer manually
@@ -135,31 +134,15 @@ class CI_DB_ibase_forge extends CI_DB_forge {
 			}
 
 			// don't add a comma on the end of the last field
-			if (++$current_field_count < count($fields))
+			if (++$current_field_count < count($this->fields))
 			{
 				$sql .= ',';
 			}
 		}
 
-		if (count($primary_keys) > 0)
-		{
-			$primary_keys = $this->db->escape_identifiers($primary_keys);
-			$sql .= ",\n\tPRIMARY KEY (".implode(', ', $primary_keys).')';
-		}
-
-		if (is_array($keys) && count($keys) > 0)
-		{
-			foreach ($keys as $key)
-			{
-				$key = is_array($key)
-					? $this->db->escape_identifiers($key)
-					: array($this->db->escape_identifiers($key));
-
-				$sql .= ",\n\tUNIQUE (".implode(', ', $key).')';
-			}
-		}
-
-		return $sql."\n)";
+		return $sql
+			.$this->_process_primary_keys()
+			."\n);";
 	}
 
 	// --------------------------------------------------------------------
@@ -171,21 +154,16 @@ class CI_DB_ibase_forge extends CI_DB_forge {
 	 *
 	 * @param	string	the table name
 	 * @param	bool
-	 * @return	string
+	 * @return	mixed
 	 */
 	protected function _drop_table($table, $if_exists)
 	{
-		$sql = 'DROP TABLE '.$this->db->escape_identifiers($table);
-
-		if ($if_exists === FALSE)
+		if ($if_exists === TRUE && ! $this->db->table_exists($table))
 		{
-			return $sql;
+			return TRUE;
 		}
 
-		$query = $this->db->query('SELECT "RDB$RELATION_NAME" FROM "RDB$RELATIONS" WHERE "RDB$RELATION_NAME" = '.$this->db->escape($table));
-		$query = $query->row_array();
-
-		return empty($query) ? TRUE : $sql;
+		return 'DROP TABLE '.$this->db->escape_identifiers($table);
 	}
 
 	// --------------------------------------------------------------------
