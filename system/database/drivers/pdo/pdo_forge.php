@@ -49,6 +49,7 @@ class CI_DB_pdo_forge extends CI_DB_forge {
 		}
 		elseif ($this->db->subdriver === '4d')
 		{
+			$this->_drop_database = FALSE;
 			$this->_rename_table = 'ALTER SCHEMA %s RENAME TO %s';
 		}
 		elseif ($this->db->subdriver === 'firebird')
