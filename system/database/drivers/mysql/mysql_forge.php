@@ -113,7 +113,7 @@ class CI_DB_mysql_forge extends CI_DB_forge {
 
 			$this->fields[$field] .= ' '.$attributes['TYPE'];
 
-			switch (strtolower($attributes['TYPE']))
+			switch (strtoupper($attributes['TYPE']))
 			{
 				case 'TINYINT':
 				case 'SMALLINT':

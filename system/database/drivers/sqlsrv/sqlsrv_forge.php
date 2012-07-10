@@ -47,56 +47,9 @@ class CI_DB_sqlsrv_forge extends CI_DB_forge {
 			? "IF NOT EXISTS (SELECT * FROM sysobjects WHERE ID = object_id(N'".$table."') AND OBJECTPROPERTY(id, N'IsUserTable') = 1)\n"
 			: '';
 
-		$sql .= 'CREATE TABLE '.$this->db->escape_identifiers($table).' (';
-
-		$current_field_count = 0;
-		foreach ($this->fields as $field => $attributes)
-		{
-			// Numeric field names aren't allowed in databases, so if the key is
-			// numeric, we know it was assigned by PHP and the developer manually
-			// entered the field information, so we'll simply add it to the list
-			if (is_numeric($field))
-			{
-				$sql .= "\n\t".$attributes;
-			}
-			else
-			{
-				$attributes = array_change_key_case($attributes, CASE_UPPER);
-
-				$sql .= "\n\t".$this->db->escape_identifiers($field).' '.$attributes['TYPE'];
-
-				if (stripos($attributes['TYPE'], 'INT') === FALSE && ! empty($attributes['CONSTRAINT']))
-				{
-					$sql .= '('.$attributes['CONSTRAINT'].')';
-				}
-
-				if ( ! empty($attributes['UNSIGNED']) && $attributes['UNSIGNED'] === TRUE)
-				{
-					$sql .= ' UNSIGNED';
-				}
-
-				if (isset($attributes['DEFAULT']))
-				{
-					$sql .= " DEFAULT '".$attributes['DEFAULT']."'";
-				}
-
-				$sql .= ( ! empty($attributes['NULL']) && $attribues['NULL'] === TRUE)
-					? ' NULL' : ' NOT NULL';
-
-				if ( ! empty($attributes['AUTO_INCREMENT']) && $attributes['AUTO_INCREMENT'] === TRUE)
-				{
-					$sql .= ' AUTO_INCREMENT';
-				}
-			}
-
-			// don't add a comma on the end of the last field
-			if (++$current_field_count < count($this->fields))
-			{
-				$sql .= ',';
-			}
-		}
-
 		return $sql
+			.'CREATE TABLE '.$this->db->escape_identifiers($table).' ('
+			.$this->_process_fields()
 			.$this->_process_primary_keys()
 			."\n);";
 	}
@@ -152,6 +105,130 @@ class CI_DB_sqlsrv_forge extends CI_DB_forge {
 			.($default_value != '' ? ' DEFAULT "'.$default_value.'"' : '')
 			.($null === NULL ? ' NULL' : ' NOT NULL')
 			.($after_field != '' ? ' AFTER '.$this->db->escape_identifiers($after_field) : '');
+	}
+
+	// --------------------------------------------------------------------
+
+	/**
+	 * Process fields
+	 *
+	 * @return	string
+	 */
+	protected function _process_fields()
+	{
+		foreach ($this->fields as $field => $attributes)
+		{
+			$attrs = array_change_key_case($attributes, CASE_UPPER);
+
+			if (empty($attributes['TYPE']))
+			{
+				unset($this->fields[$field]);
+				continue;
+			}
+
+			$this->fields[$field] = empty($attributes['NAME'])
+						? "\n\t".$this->db->escape_identifiers($field)
+						: "\n\t".$this->db->escape_identifiers($attributes['NAME']);
+
+			switch (strtoupper($attributes['TYPE']))
+			{
+				case 'CHAR':
+				case 'NCHAR':
+				case 'VARCHAR':
+				case 'NVARCHAR':
+				case 'BINARY':
+				case 'VARBINARY':
+				case 'FLOAT':
+					empty($attributes['CONSTRAINT']) OR $attributes['CONSTRAINT'] = (int) $attributes['CONSTRAINT'];
+					if ( ! empty($attributes['UNSIGNED']) && $attributes['UNSIGNED'] === TRUE)
+					{
+						$attributes['TYPE'] = 'REAL';
+						$attributes['UNSIGNED'] = FALSE;
+					}
+					break;
+				case 'MEDIUMINT':
+				case 'INTEGER':
+					$attributes['TYPE'] = 'INT';
+					$attributes['UNSIGNED'] = FALSE;
+				case 'TINYINT':
+					if ( ! empty($attributes['UNSIGNED']) && $attributes['UNSIGNED'] === TRUE)
+					{
+						$attributes['TYPE'] = 'SMALLINT';
+						$attributes['UNSIGNED'] = FALSE;
+					}
+				case 'SMALLINT':
+					if ( ! empty($attributes['UNSIGNED']) && $attributes['UNSIGNED'] === TRUE)
+					{
+						$attributes['TYPE'] = 'INT';
+						$attributes['UNSIGNED'] = FALSE;
+					}
+				case 'INT':
+					if ( ! empty($attributes['UNSIGNED']) && $attributes['UNSIGNED'] === TRUE)
+					{
+						$attributes['TYPE'] = 'BIGINT';
+						$attributes['UNSIGNED'] = FALSE;
+					}
+				case 'BIGINT':
+				case 'REAL':
+				case 'BIT':
+				case 'TEXT':
+				case 'NTEXT':
+					empty($attributes['CONSTRAINT']) OR $attributes['CONSTRAINT'] = FALSE;
+					break;
+				case 'DECIMAL':
+				case 'NUMERIC':
+					empty($attributes['CONSTRAINT']) OR $this->fields[$field] .= implode(',', $attributes['CONSTRAINT']);
+					break;
+				default:
+					break;
+			}
+
+			$this->fields[$field] .= ' '.$attributes['TYPE'];
+
+			if ( ! empty($attributes['CONSTRAINT']))
+			{
+				$this->fields[$field] .= '('.$attributes['CONSTRAINT'].')';
+			}
+
+			if (array_key_exists('DEFAULT', $attributes))
+			{
+				if ($attributes['DEFAULT'] === NULL)
+				{
+					// Override the NULL attribute if that's our default
+					$attributes['NULL'] = TRUE;
+					$attributes['DEFAULT'] = 'NULL';
+				}
+				else
+				{
+					$attributes['DEFAULT'] = $this->db->escape($attributes['DEFAULT']);
+				}
+			}
+
+			$this->fields[$field] .= (empty($attributes['NULL']) && $attributes['NULL'] === TRUE)
+						? ' NULL' : ' NOT NULL';
+
+			if (isset($attributes['DEFAULT']))
+			{
+				$this->fields[$field] .= ' DEFAULT '.$attributes['DEFAULT'];
+			}
+
+			if ( ! empty($attributes['AUTO_INCREMENT']) && $attributes['AUTO_INCREMENT'] === TRUE && stripos($attributes['TYPE'], 'int') !== FALSE)
+			{
+				$this->fields[$field] .= ' IDENTITY(1,1)';
+			}
+
+			if ( ! empty($attributes['UNIQUE']) && $attributes['UNIQUE'] === TRUE)
+			{
+				$sql .= ' UNIQUE';
+			}
+		}
+
+		if (empty($this->fields))
+		{
+			return FALSE;
+		}
+
+		return implode(',', $this->fields);
 	}
 
 }

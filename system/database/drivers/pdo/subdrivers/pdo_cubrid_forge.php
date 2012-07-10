@@ -122,7 +122,7 @@ class CI_DB_pdo_cubrid_forge extends CI_DB_pdo_forge {
 
 			$this->fields[$field] .= ' '.$attributes['TYPE'];
 
-			switch (strtolower($attributes['TYPE']))
+			switch (strtoupper($attributes['TYPE']))
 			{
 				case 'TINYINT':
 				case 'SMALLINT':
