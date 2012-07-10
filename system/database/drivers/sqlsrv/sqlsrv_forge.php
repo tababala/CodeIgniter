@@ -70,7 +70,7 @@ class CI_DB_sqlsrv_forge extends CI_DB_forge {
 		$sql = 'DROP TABLE '.$this->db->escape_identifiers($table);
 
 		return ($if_exists)
-			? "IF EXISTS (SELECT * FROM sysobjects WHERE ID = object_id(N'".$table."') AND OBJECTPROPERTY(id, N'IsUserTable') = 1) ".$sql;
+			? "IF EXISTS (SELECT * FROM sysobjects WHERE ID = object_id(N'".$table."') AND OBJECTPROPERTY(id, N'IsUserTable') = 1) ".$sql
 			: $sql;
 	}
 
